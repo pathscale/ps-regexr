@@ -53,6 +53,9 @@ pub struct RegexBuilder {
     /// How deeply groups/classes/flag-scopes may nest; see
     /// [`RegexBuilder::nest_limit`].
     nest_limit: u32,
+    /// Refuse patterns that need the backtracking engine; see
+    /// [`RegexBuilder::linear_time`].
+    linear_time: bool,
 }
 
 impl RegexBuilder {
@@ -65,6 +68,7 @@ impl RegexBuilder {
             backtrack_limit: vm::backtracking::DEFAULT_BACKTRACK_LIMIT,
             size_limit: hir::builder::DEFAULT_EXPANDED_SIZE,
             nest_limit: parser::DEFAULT_NEST_LIMIT,
+            linear_time: false,
         }
     }
 
@@ -148,6 +152,19 @@ impl RegexBuilder {
         self
     }
 
+    /// Refuse patterns that cannot run in linear time.
+    ///
+    /// Every engine in this crate is linear in the input except the
+    /// backtracking one, and only backreferences reach it. A caller that
+    /// compiles untrusted patterns and cannot hang on them should set this
+    /// so those patterns fail at compile rather than at match.
+    ///
+    /// Lookaround stays allowed: it runs on the automaton engines.
+    pub fn linear_time(mut self, enabled: bool) -> Self {
+        self.linear_time = enabled;
+        self
+    }
+
     /// Enables or disables JIT compilation.
     ///
     /// When enabled, the regex will be compiled to native machine code
@@ -202,6 +219,12 @@ impl RegexBuilder {
     pub fn build(self) -> Result<Regex> {
         let ast = parser::parse_with_nest_limit(&self.pattern, self.nest_limit)?;
         let mut hir_result = hir::translate_with_limit(&ast, self.size_limit)?;
+        if self.linear_time && hir_result.props.has_backrefs {
+            return Err(Error::new(
+                error::ErrorKind::BackreferencesNotAllowed,
+                &self.pattern,
+            ));
+        }
 
         // Apply prefix optimization if enabled
         if self.optimize_prefixes {
@@ -831,6 +854,22 @@ impl<'t> std::ops::Index<&str> for Captures<'t> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linear_time_refuses_backreferences() {
+        assert!(RegexBuilder::new(r"(a+)\1")
+            .linear_time(true)
+            .build()
+            .is_err());
+        assert!(RegexBuilder::new(r"(a+)\1")
+            .linear_time(false)
+            .build()
+            .is_ok());
+        assert!(RegexBuilder::new(r"fn\s+\w+")
+            .linear_time(true)
+            .build()
+            .is_ok());
+    }
 
     /// Sanity check on the escaped output shape: every metacharacter this
     /// function targets gets a leading backslash, and nothing else does.

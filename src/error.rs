@@ -121,6 +121,8 @@ pub enum ErrorKind {
     InvalidGroup,
     /// Invalid backreference.
     InvalidBackref(usize),
+    /// A backreference under [`crate::RegexBuilder::linear_time`].
+    BackreferencesNotAllowed,
     /// Backreference to non-existent group.
     BackrefNotFound(usize),
     /// Malformed named-backreference syntax: `\k` at end of pattern, `\k`
@@ -275,6 +277,10 @@ impl fmt::Display for ErrorKind {
             }
             ErrorKind::InvalidGroup => write!(f, "invalid group syntax"),
             ErrorKind::InvalidBackref(n) => write!(f, "invalid backreference '\\{}'", n),
+            ErrorKind::BackreferencesNotAllowed => write!(
+                f,
+                "backreferences are not allowed when linear-time matching is required"
+            ),
             ErrorKind::BackrefNotFound(n) => {
                 write!(f, "backreference '\\{}' references non-existent group", n)
             }
