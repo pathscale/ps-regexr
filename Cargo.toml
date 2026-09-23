@@ -1,15 +1,15 @@
 [package]
-name = "regexr"
-version = "0.5.0"
+name = "ps-regexr"
+version = "0.5.1"
 edition = "2021"
 # The MSRV is a published contract, not a CI-only constant: cargo refuses the
 # build on an older toolchain instead of failing somewhere inside the compile,
 # and the `msrv` CI job reads this value rather than hardcoding its own.
 rust-version = "1.83"
 authors = ["Farhan Syah"]
-description = "A high-performance regex engine built from scratch with JIT compilation and SIMD acceleration"
+description = "Pathscale fork of regexr: a regex engine with JIT compilation and SIMD acceleration, plus linear-time matching"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ml-rust/regexr"
+repository = "https://github.com/pathscale/ps-regexr"
 keywords = ["regex", "jit", "simd", "pattern-matching"]
 categories = ["text-processing", "parsing"]
 
@@ -27,6 +27,11 @@ exclude = [
     "/scripts/",
     "/deny.toml",
 ]
+
+[lib]
+# The library keeps upstream's name, so `use regexr::` works unchanged in this crate's
+# tests and examples, and a dependent writes `regexr = { package = "ps-regexr", ... }`.
+name = "regexr"
 
 [features]
 default = ["simd"]

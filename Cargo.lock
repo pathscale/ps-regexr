@@ -509,6 +509,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ps-regexr"
+version = "0.5.1"
+dependencies = [
+ "aho-corasick",
+ "criterion",
+ "dynasm",
+ "dynasmrt",
+ "fancy-regex",
+ "memchr",
+ "pcre2",
+ "regex",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -571,20 +585,6 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
-
-[[package]]
-name = "regexr"
-version = "0.5.0"
-dependencies = [
- "aho-corasick",
- "criterion",
- "dynasm",
- "dynasmrt",
- "fancy-regex",
- "memchr",
- "pcre2",
- "regex",
-]
 
 [[package]]
 name = "rustversion"

@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on 
 
 Each release must have a non-empty section here before it can be tagged — `.github/workflows/release-validate.yml` refuses a tag whose version has no entry, and the GitHub Release body is this file's section for that version.
 
+## [0.5.1] - 2026-09-23
+
+Published as `ps-regexr`, Pathscale's fork of `regexr`. The library is still named `regexr`.
+
+### Added
+
+- `RegexBuilder::linear_time`: when enabled, a pattern that needs backtracking (a backreference) is refused at build time instead of compiled, so matching stays linear in the input.
+
 ## [0.5.0] - 2026-08-14
 
 ### Fixed
