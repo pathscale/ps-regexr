@@ -62,6 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ inputs.tag }}
 
       - name: Install Rust
@@ -107,6 +108,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           ref: ${{ inputs.tag }}
           fetch-depth: 0
 
@@ -140,6 +142,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          token: ${{ github.token }}
           tag_name: ${{ inputs.tag }}
           name: regexr ${{ needs.validate-version.outputs.version }}
           body_path: /tmp/release-notes.md
