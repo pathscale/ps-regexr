@@ -123,6 +123,8 @@ pub enum ErrorKind {
     InvalidBackref(usize),
     /// A backreference under [`crate::RegexBuilder::linear_time`].
     BackreferencesNotAllowed,
+    /// Lookaround is unavailable under strict linear-time matching.
+    LookaroundNotAllowed,
     /// Backreference to non-existent group.
     BackrefNotFound(usize),
     /// Malformed named-backreference syntax: `\k` at end of pattern, `\k`
@@ -277,6 +279,10 @@ impl fmt::Display for ErrorKind {
             }
             ErrorKind::InvalidGroup => write!(f, "invalid group syntax"),
             ErrorKind::InvalidBackref(n) => write!(f, "invalid backreference '\\{}'", n),
+            ErrorKind::LookaroundNotAllowed => write!(
+                f,
+                "lookaround is not allowed when linear-time matching is required"
+            ),
             ErrorKind::BackreferencesNotAllowed => write!(
                 f,
                 "backreferences are not allowed when linear-time matching is required"
