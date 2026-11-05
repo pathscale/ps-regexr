@@ -152,6 +152,9 @@ impl TaggedNfaJit {
 
     /// Finds the first match, returning (start, end).
     pub fn find(&self, input: &[u8]) -> Option<(usize, usize)> {
+        if input.len() >= i32::MAX as usize {
+            return self.fallback_vm.find(input);
+        }
         // Fast path: if find_fn doesn't need context, skip all context setup
         if !self.find_needs_ctx {
             // Debug timing to isolate JIT call overhead
@@ -314,6 +317,9 @@ impl TaggedNfaJit {
     /// Runs the capture-extracting JIT over `input`, which is either the whole
     /// haystack or a suffix of it; positions are relative to `input`.
     fn captures_in_suffix(&self, input: &[u8]) -> Option<Vec<Option<(usize, usize)>>> {
+        if input.len() >= i32::MAX as usize {
+            return self.fallback_captures_from(input, 0);
+        }
         // Get or create cached context
         let mut ctx_ref = self.cached_ctx.write().unwrap();
         let ctx = ctx_ref.get_or_insert_with(|| {
@@ -414,6 +420,9 @@ impl TaggedNfaJit {
 
     /// Finds a match starting at or after the given position.
     pub fn find_at(&self, input: &[u8], start: usize) -> Option<(usize, usize)> {
+        if input.len() >= i32::MAX as usize {
+            return self.fallback_vm.find_from(input, start);
+        }
         if start > input.len() {
             return None;
         }
