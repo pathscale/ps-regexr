@@ -16,7 +16,7 @@ set -euo pipefail
 VERSION="${1:?usage: stamp_version.sh <version>}"
 
 CURRENT=$(cargo metadata --no-deps --format-version=1 \
-    | jq -r '.packages[] | select(.name == "regexr") | .version')
+    | jq -er '.packages[] | select(.name == "ps-regexr") | .version')
 
 if [[ "$VERSION" == "$CURRENT" ]]; then
     echo "Version already $VERSION — nothing to stamp."
