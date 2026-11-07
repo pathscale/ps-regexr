@@ -192,23 +192,12 @@ enum CompiledInner {
 /// Every engine has a complete linear-time search of its own
 /// ([`CompiledRegex::find_engine_from`]), so the escape is to stop verifying and
 /// hand the rest of the input to it. This tracks how many attempts have failed
-/// and how much input they span: past [`MAX_ATTEMPTS`], a prefilter still
-/// keeping more than one position in [`MIN_SELECTIVITY`] is not filtering, and
-/// the handoff is taken. A prefilter that is genuinely selective never trips it
-/// and keeps the candidate loop for the whole search.
+/// and then transfers to one general engine search after a fixed attempt cap.
 struct PrefilterDrive {
     attempts: usize,
-    first_candidate: usize,
 }
 
-/// Failed attempts to allow before the selectivity of a prefilter is judged.
-/// The handoff costs one engine pass, so this bounds the waste at a constant
-/// number of passes rather than one per candidate.
 const MAX_ATTEMPTS: usize = 64;
-
-/// One candidate in this many positions is the point below which a prefilter is
-/// discarding enough of the input to be worth verifying position by position.
-const MIN_SELECTIVITY: usize = 8;
 
 /// Outcome of [`CompiledRegex::captures_one_pass`].
 enum OnePassSearch<T> {
@@ -223,21 +212,13 @@ enum OnePassSearch<T> {
 
 impl PrefilterDrive {
     fn new() -> Self {
-        Self {
-            attempts: 0,
-            first_candidate: 0,
-        }
+        Self { attempts: 0 }
     }
 
-    /// Records a failed attempt at `candidate`. Returns true when the caller
-    /// should abandon the loop and search from `candidate` with the engine.
-    fn give_up(&mut self, candidate: usize) -> bool {
-        if self.attempts == 0 {
-            self.first_candidate = candidate;
-        }
-        self.attempts += 1;
-        self.attempts > MAX_ATTEMPTS
-            && self.attempts * MIN_SELECTIVITY > candidate - self.first_candidate + 1
+    /// Stop repeated anchored searches after a fixed number of failures.
+    fn give_up(&mut self, _candidate: usize) -> bool {
+        self.attempts = self.attempts.saturating_add(1);
+        self.attempts >= MAX_ATTEMPTS
     }
 }
 

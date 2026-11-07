@@ -2,6 +2,10 @@
 
 # regexr
 
+Security contract: strict linear-time mode rejects user lookaround and backreferences.
+With linear_time(false), lookaround may take polynomial time without a step budget.
+Only the backtracking engine has the explicit backtrack_limit budget.
+
 **A specialized Rust regex engine designed for LLM tokenization and complex pattern matching.**
 
 [![Crates.io](https://img.shields.io/crates/v/regexr.svg)](https://crates.io/crates/regexr)
