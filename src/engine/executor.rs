@@ -192,23 +192,20 @@ enum CompiledInner {
 /// Every engine has a complete linear-time search of its own
 /// ([`CompiledRegex::find_engine_from`]), so the escape is to stop verifying and
 /// hand the rest of the input to it. This tracks how many attempts have failed
-/// and how much input they span: past [`MAX_ATTEMPTS`], a prefilter still
-/// keeping more than one position in [`MIN_SELECTIVITY`] is not filtering, and
-/// the handoff is taken. A prefilter that is genuinely selective never trips it
-/// and keeps the candidate loop for the whole search.
+/// and then transfers to one general engine search after a fixed attempt cap.
+///
+/// The cap counts failures, not how densely the prefilter fires. A rule that
+/// keeps verifying while candidates are sparse still costs a quadratic total
+/// when each failed attempt scans to the end of the input; a fixed count bounds
+/// verification at [`MAX_ATTEMPTS`] attempts. The tradeoff is that a selective
+/// prefilter with that many false hits also hands over, and the rest of the
+/// input runs on the general engine search: still linear, but slower than
+/// verifying the few remaining candidates would have been.
 struct PrefilterDrive {
     attempts: usize,
-    first_candidate: usize,
 }
 
-/// Failed attempts to allow before the selectivity of a prefilter is judged.
-/// The handoff costs one engine pass, so this bounds the waste at a constant
-/// number of passes rather than one per candidate.
 const MAX_ATTEMPTS: usize = 64;
-
-/// One candidate in this many positions is the point below which a prefilter is
-/// discarding enough of the input to be worth verifying position by position.
-const MIN_SELECTIVITY: usize = 8;
 
 /// Outcome of [`CompiledRegex::captures_one_pass`].
 enum OnePassSearch<T> {
@@ -223,21 +220,14 @@ enum OnePassSearch<T> {
 
 impl PrefilterDrive {
     fn new() -> Self {
-        Self {
-            attempts: 0,
-            first_candidate: 0,
-        }
+        Self { attempts: 0 }
     }
 
-    /// Records a failed attempt at `candidate`. Returns true when the caller
-    /// should abandon the loop and search from `candidate` with the engine.
-    fn give_up(&mut self, candidate: usize) -> bool {
-        if self.attempts == 0 {
-            self.first_candidate = candidate;
-        }
-        self.attempts += 1;
-        self.attempts > MAX_ATTEMPTS
-            && self.attempts * MIN_SELECTIVITY > candidate - self.first_candidate + 1
+    /// Records one failed anchored attempt and reports whether the fixed cap
+    /// on failures has been reached.
+    fn give_up(&mut self) -> bool {
+        self.attempts = self.attempts.saturating_add(1);
+        self.attempts >= MAX_ATTEMPTS
     }
 }
 
@@ -353,7 +343,7 @@ impl CompiledRegex {
                 if self.is_match_at(input, candidate) {
                     return true;
                 }
-                if drive.give_up(candidate) {
+                if drive.give_up() {
                     return self
                         .find_engine_from_boundary(input, candidate, None)
                         .is_some();
@@ -607,7 +597,7 @@ impl CompiledRegex {
                 if let Some(result) = self.find_at_pos(input, start, dfa.as_deref_mut()) {
                     return Some(result);
                 }
-                if drive.give_up(start) {
+                if drive.give_up() {
                     // The caller applies the codepoint-boundary rule.
                     return self.find_engine_from(input, start, dfa);
                 }
@@ -953,7 +943,7 @@ impl CompiledRegex {
             if one_pass.captures_at_into(input, candidate, &mut scratch, &mut slots) {
                 return OnePassSearch::Match(slots);
             }
-            if drive.give_up(candidate) {
+            if drive.give_up() {
                 return OnePassSearch::GaveUp(candidate);
             }
         }
@@ -2108,6 +2098,89 @@ mod tests {
     }
 
     // Prefilter integration tests
+
+    #[test]
+    fn test_prefilter_retry_cap_preserves_search_results() {
+        let hir = translate(&parse(r"a([bc])d").unwrap()).unwrap();
+        let capture_nfa = nfa_compile(&hir).unwrap();
+        let re = CompiledRegex {
+            inner: CompiledInner::LazyDfa(LazyDfaPool::new(LazyDfa::new(capture_nfa.clone()))),
+            prefilter: Prefilter::SingleByte(b'a'),
+            prefix_offset: 0,
+            simple_eager_scan: false,
+            reverse_suffix: None,
+            capture_nfa: RwLock::new(Some(capture_nfa)),
+            one_pass: OnceLock::new(),
+            capture_vm: RwLock::new(None),
+            capture_ctx: RwLock::new(None),
+            backtracking_vm: None,
+            #[cfg(all(feature = "jit", any(target_arch = "x86_64", target_arch = "aarch64")))]
+            backtracking_jit: None,
+        };
+
+        // Pin the engine and prefilter directly so this regression does not
+        // depend on compile-time engine-selection heuristics.
+        assert!(re.one_pass().is_some(), "pattern must be one-pass eligible");
+        assert!(matches!(&re.prefilter, Prefilter::SingleByte(b'a')));
+        assert!(!re.prefilter.is_full_match());
+        assert_eq!(re.engine_name(), "LazyDfa");
+        assert!(
+            !re.engine_searches_single_pass(),
+            "the LazyDfa must verify candidates individually"
+        );
+
+        // The cap is reached only after the first 63 rejected candidates have
+        // kept the candidate drive active.
+        let mut late = b"abd".to_vec();
+        for _ in 0..MAX_ATTEMPTS {
+            late.extend_from_slice(b"aX");
+        }
+        late.extend_from_slice(b"acdabd");
+        let mut drive = PrefilterDrive::new();
+        for (failure, candidate) in re
+            .prefilter
+            .find_candidates_from(&late, 3)
+            .take(MAX_ATTEMPTS)
+            .enumerate()
+        {
+            assert!(!re.is_match_at(&late, candidate));
+            assert_eq!(
+                drive.give_up(),
+                failure + 1 == MAX_ATTEMPTS,
+                "drive state after failed candidate {} at {candidate}",
+                failure + 1
+            );
+        }
+
+        let one_pass = re.one_pass().expect("pattern must be one-pass eligible");
+        let early = b"abdacdabd";
+        assert!(re.is_match(&early[3..]));
+        assert_eq!(re.find_from(early, 3), Some((3, 6)));
+        assert_eq!(re.captures_from(early, 3), Some(vec![Some((3, 6)), Some((4, 5))]));
+
+        assert!(matches!(
+            re.captures_one_pass(one_pass, &late, 3),
+            OnePassSearch::GaveUp(129)
+        ));
+        assert!(re.is_match(&late[3..]));
+        assert_eq!(re.find_from(&late, 3), Some((131, 134)));
+        assert_eq!(
+            re.captures_from(&late, 3),
+            Some(vec![Some((131, 134)), Some((132, 133))])
+        );
+
+        let mut absent = b"abd".to_vec();
+        for _ in 0..MAX_ATTEMPTS {
+            absent.extend_from_slice(b"aX");
+        }
+        assert!(matches!(
+            re.captures_one_pass(one_pass, &absent, 3),
+            OnePassSearch::GaveUp(129)
+        ));
+        assert!(!re.is_match(&absent[3..]));
+        assert_eq!(re.find_from(&absent, 3), None);
+        assert_eq!(re.captures_from(&absent, 3), None);
+    }
 
     #[test]
     fn test_prefilter_single_literal() {

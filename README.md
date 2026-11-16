@@ -4,8 +4,8 @@
 
 **A specialized Rust regex engine designed for LLM tokenization and complex pattern matching.**
 
-[![Crates.io](https://img.shields.io/crates/v/regexr.svg)](https://crates.io/crates/regexr)
-[![Documentation](https://docs.rs/regexr/badge.svg)](https://docs.rs/regexr)
+[![Crates.io](https://img.shields.io/crates/v/ps-regexr.svg)](https://crates.io/crates/ps-regexr)
+[![Documentation](https://docs.rs/ps-regexr/badge.svg)](https://docs.rs/ps-regexr)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE-MIT)
 
 ---
@@ -30,9 +30,9 @@ The Rust ecosystem already has the excellent, battle-tested [**`regex`**](https:
 2.  **JIT Compilation:** You want native code generation for hot regex patterns.
     - _Why not `regex`/`fancy-regex`?_ Neither offers JIT compilation.
     - _Why not `pcre2`?_ Requires installing a system C library (libpcre2).
-3.  **No System Dependencies:** Just `cargo add regexr` — no C toolchain or system libraries required. All code (including JIT) compiles with `cargo build`.
+3.  **No System Dependencies:** Just `cargo add ps-regexr --rename regexr` — no C toolchain or system libraries required. All code (including JIT) compiles with `cargo build`.
 4.  **WASM Support:** Compiles to `wasm32-unknown-unknown` with `--no-default-features`. Same API and features across native and WASM targets — JIT/SIMD are disabled automatically, but lookarounds, backreferences, and bounded execution all work. No need to swap crates per platform.
-5.  **Bounded Execution:** Matching runs on automaton engines that track all alternatives at once, so time is linear in the input and no pattern backtracks catastrophically — including capture extraction, which is the operation most engines quietly hand to a backtracker. Backreferences are the one exception, because matching them is NP-hard: those patterns run on a backtracking engine under a step budget you can set with `RegexBuilder::backtrack_limit`, and `try_find` / `try_captures` / `try_is_match` report an exhausted budget rather than reporting "no match".
+5.  **Bounded Execution:** Matching runs on automaton engines that track all alternatives at once, so time is linear in the input and no pattern backtracks catastrophically — including capture extraction, which is the operation most engines quietly hand to a backtracker. There are two exceptions. Backreferences, because matching them is NP-hard: those patterns run on a backtracking engine under a step budget you can set with `RegexBuilder::backtrack_limit`, and `try_find` / `try_captures` / `try_is_match` report an exhausted budget rather than reporting "no match". Lookaround, whose evaluation can take polynomial time in the input and has no step budget. The security contract is `RegexBuilder::linear_time(true)`: it refuses both lookaround and backreferences when the regex is built, so every pattern it accepts matches in linear time.
 
 ## The Problem Solved
 
@@ -48,16 +48,18 @@ Developers building LLM tokenizers (like GPT-4 or Llama 3) currently face a dile
 
 Add this to your `Cargo.toml`:
 
+The package is named `ps-regexr`; Rust imports remain `regexr`.
+
 ```toml
 [dependencies]
-regexr = "*"
+regexr = { package = "ps-regexr", version = "*" }
 ```
 
 For JIT compilation support:
 
 ```toml
 [dependencies]
-regexr = { version = "*", features = ["full"] }
+regexr = { package = "ps-regexr", version = "*", features = ["full"] }
 ```
 
 ## Usage

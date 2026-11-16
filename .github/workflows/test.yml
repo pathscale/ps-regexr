@@ -1,37 +1,9 @@
-# Reusable test workflow.
-#
-# Called by:
-#   - ci.yml              (PR checks + manual dispatch)
-#   - release-prepare.yml (tag gate, before anything is published)
-#
-# Not triggered directly — `workflow_call` only.
-#
-# Every third-party action is pinned to a commit SHA with the release it
-# corresponds to in a trailing comment. A tag is a movable pointer; a SHA is
-# not, so a compromised or retagged action cannot silently enter a run that
-# holds a crates.io token. Dependabot owns keeping the pins current — see
-# .github/dependabot.yml.
-#
-# Jobs:
-#   lint           — rustfmt, clippy, docs, doctests, shellcheck
-#   test           — `cargo nextest run` on Linux / macOS / Windows, default and
-#                    full features
-#   feature-matrix — every feature combination that ships, plus wasm32
-#   jit-platforms  — the JIT actually executed on ARM64 Linux and both macOS
-#                    architectures; codegen bugs there are invisible to a
-#                    compile-only check
-#   cross-check    — bidirectional x86_64 ↔ aarch64 cross-compilation, which is
-#                    where the dynasm `.arch` directives regress
-#   msrv           — the MSRV declared in Cargo.toml, read from the manifest so
-#                    the job and the published contract cannot drift apart
-#   fuzz           — differential oracle against the reference matcher, on
-#                    fixed seeds so a failure is reproducible
-#   audit          — cargo-deny: advisories, licences, sources, banned crates
+# Manual verification; publishing is a separate explicit action.
 
 name: Test
 
 on:
-  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -47,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -91,6 +65,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -126,6 +102,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -185,6 +163,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -230,6 +210,8 @@ jobs:
             linker: x86_64-linux-gnu-gcc
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -263,6 +245,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Read MSRV from Cargo.toml
         id: msrv
@@ -276,6 +260,17 @@ jobs:
           echo "Declared MSRV: $VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Install stable Rust for dependency resolution
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      # Prefer dependency versions whose rust-version the declared MSRV meets.
+      # Otherwise stable Cargo picks the newest release of each dependency and
+      # the check below fails on a dependency's toolchain, not on this crate.
+      - name: Resolve dependencies for the MSRV check
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+        run: cargo generate-lockfile
+
       - name: Install Rust ${{ steps.msrv.outputs.version }}
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
@@ -288,10 +283,8 @@ jobs:
       # Library target only. Dev-dependencies are benchmark harnesses and the
       # competing engines they measure; their MSRVs are not regexr's contract.
       #
-      # `--locked` is what makes this job mean anything. An older cargo happily
-      # re-resolves Cargo.lock down to whatever it can build and then reports
-      # success, so without it the job proves some dependency set works on the
-      # MSRV — not the one that ships.
+      # Generate the graph with stable Cargo, then require the older MSRV Cargo
+      # to check that same graph without changing its dependency selection.
       - name: Check MSRV (all features)
         run: cargo check --features full --lib --locked
 
@@ -310,6 +303,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -358,6 +353,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -367,7 +364,9 @@ jobs:
         with:
           tool: cargo-deny
 
-      # `--locked`: audit the dependency versions that are committed, not
-      # whatever a fresh resolve happens to pick up on the day CI runs.
+      - name: Resolve dependencies for the audit
+        run: cargo generate-lockfile
+
+      # Keep cargo-deny on the graph generated for this job.
       - name: Run cargo-deny
         run: cargo deny --exclude-dev --locked check

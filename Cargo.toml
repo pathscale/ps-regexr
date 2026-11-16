@@ -1,6 +1,6 @@
 [package]
 name = "ps-regexr"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 # The MSRV is a published contract, not a CI-only constant: cargo refuses the
 # build on an older toolchain instead of failing somewhere inside the compile,
@@ -50,7 +50,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 regex = "1.13"
 fancy-regex = "0.19"
 pcre2 = "0.2"
-aho-corasick = "1.1"
+aho-corasick = { version = "1.1", default-features = false }
 
 [[bench]]
 name = "competitors"
