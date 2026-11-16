@@ -7,9 +7,7 @@
 # `output` (default /tmp/changelog-section.md) and echoes it. Exits non-zero if
 # CHANGELOG.md is missing, or that section is absent or empty.
 #
-# Called by release-validate.yml as the release gate, and by release.yml to
-# build the GitHub Release body. One implementation, so the check and the notes
-# can never disagree about what a section contains.
+# Run it locally before publishing to check that the release has notes.
 #
 # Pass the BASE version: a `v0.1.5-beta.1` tag is a candidate for the `[0.1.5]`
 # section, so a prerelease rehearses the notes the final release will carry.

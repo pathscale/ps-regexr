@@ -2,7 +2,19 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Each release must have a non-empty section here before it can be tagged — `.github/workflows/release-validate.yml` refuses a tag whose version has no entry, and the GitHub Release body is this file's section for that version.
+Each release must have a non-empty section here before it is published. `scripts/ci/changelog_section.sh <version>` prints that section and fails when it is missing or empty.
+
+## [0.6.0] - 2026-11-16
+
+### Changed
+
+- Breaking: `RegexBuilder::linear_time(true)` now also refuses patterns that use lookaround, with the new `ErrorKind::LookaroundNotAllowed`, because lookaround evaluation is not linear in the input. Patterns without lookaround or backreferences build as before, and `linear_time(false)` still accepts lookaround.
+- Breaking: `ErrorKind` is `#[non_exhaustive]`, so a `match` on it needs a wildcard arm and later error kinds are not breaking changes.
+- Prefilter-driven candidate verification hands the rest of the input to the general engine search after a fixed number of failed candidates, whatever the prefilter's selectivity, which bounds the verification work for every pattern.
+
+### Fixed
+
+- The tagged-NFA JIT runs inputs of `i32::MAX` bytes or more on its interpreter fallback.
 
 ## [0.5.1] - 2026-09-23
 

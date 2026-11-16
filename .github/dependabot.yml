@@ -30,15 +30,11 @@ updates:
     cooldown:
       default-days: 7
 
-  # Cargo dependencies. regexr's manifest uses caret requirements, so most
-  # upstream releases need no manifest edit — but the committed Cargo.lock is
-  # what CI, `cargo deny`, and the MSRV job actually resolve against, and left
-  # alone it pins a snapshot that drifts years behind. These PRs move the lock
-  # and, when a release is semver-incompatible, the requirement with it.
-  #
-  # Split into two groups because they carry different risk: a runtime bump
-  # ships to every consumer of the library, while a dev bump only touches the
-  # benchmark harness and the engines it measures against.
+  # Cargo dependencies. This library does not commit Cargo.lock. CI resolves a
+  # fresh graph for each run's MSRV and advisory checks; Dependabot keeps manifest
+  # requirements current when a dependency release needs a requirement change.
+  # Split runtime and development updates because runtime requirements affect
+  # downstream consumers while development requirements only affect CI.
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:

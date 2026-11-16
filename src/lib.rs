@@ -154,12 +154,11 @@ impl RegexBuilder {
 
     /// Refuse patterns that cannot run in linear time.
     ///
-    /// Every engine in this crate is linear in the input except the
-    /// backtracking one, and only backreferences reach it. A caller that
-    /// compiles untrusted patterns and cannot hang on them should set this
-    /// so those patterns fail at compile rather than at match.
+    /// Strict mode refuses user lookaround and backreferences at compilation.
+    /// The internal fixed-width lowering of strict end anchors remains allowed.
+    /// Callers that disable this mode accept nonlinear lookaround evaluation.
     ///
-    /// Lookaround stays allowed: it runs on the automaton engines.
+    /// Lookaround is refused because its current evaluation is not linear.
     pub fn linear_time(mut self, enabled: bool) -> Self {
         self.linear_time = enabled;
         self
@@ -219,6 +218,32 @@ impl RegexBuilder {
     pub fn build(self) -> Result<Regex> {
         let ast = parser::parse_with_nest_limit(&self.pattern, self.nest_limit)?;
         let mut hir_result = hir::translate_with_limit(&ast, self.size_limit)?;
+        fn has_user_lookaround(expr: &parser::Expr) -> bool {
+            match expr {
+                parser::Expr::Lookaround(_) => true,
+                parser::Expr::Concat(items) | parser::Expr::Alt(items) =>
+                    items.iter().any(has_user_lookaround),
+                parser::Expr::Repeat(repeat) => has_user_lookaround(&repeat.expr),
+                parser::Expr::Group(group) => has_user_lookaround(&group.expr),
+                parser::Expr::Empty
+                | parser::Expr::Literal(_)
+                | parser::Expr::Class(_)
+                | parser::Expr::Anchor(_)
+                | parser::Expr::Backref(_)
+                | parser::Expr::Dot
+                | parser::Expr::GraphemeCluster
+                | parser::Expr::UnicodeProperty { .. }
+                | parser::Expr::PerlClass(_)
+                | parser::Expr::LineBreak
+                | parser::Expr::AnyExceptNewline => false,
+            }
+        }
+        if self.linear_time && has_user_lookaround(&ast.expr) {
+            return Err(Error::new(
+                error::ErrorKind::LookaroundNotAllowed,
+                &self.pattern,
+            ));
+        }
         if self.linear_time && hir_result.props.has_backrefs {
             return Err(Error::new(
                 error::ErrorKind::BackreferencesNotAllowed,
@@ -869,6 +894,21 @@ mod tests {
             .linear_time(true)
             .build()
             .is_ok());
+    }
+
+    #[test]
+    fn linear_time_refuses_nested_lookaround() {
+        let pattern = r"x(?:a|b(?=c)c){1,2}";
+        let strict_error = RegexBuilder::new(pattern)
+            .linear_time(true)
+            .build()
+            .err()
+            .expect("strict linear-time mode must reject user lookaround");
+        assert_eq!(
+            strict_error.kind(),
+            &error::ErrorKind::LookaroundNotAllowed
+        );
+        assert!(RegexBuilder::new(pattern).linear_time(false).build().is_ok());
     }
 
     /// Sanity check on the escaped output shape: every metacharacter this
